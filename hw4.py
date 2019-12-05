@@ -4,6 +4,8 @@ from concurrent import futures
 import sys  # For sys.argv, sys.exit()
 import socket  # for gethostbyname()
 
+import select
+import queue as Queue
 import grpc
 
 import csci4220_hw4_pb2
@@ -21,28 +23,65 @@ def run():
 	my_address = socket.gethostbyname(my_hostname) # Gets my IP address from my hostname
 
 	# creating the server socket
-	server = socket.socket()          
-	server.bind(('', my_port))         
-	server.listen(10)     
-
-	# a forever loop until we interrupt it or  
-	# an error occurs 
-	while True: 
-		# Establish connection with client. 
-		c, addr = server.accept()      
-		print('Got connection from ', addr)
-
-		# send a thank you message to the client.  
-		c.send('Thank you for connecting') 
-	  
-		# Close the connection with the client 
-		c.close() 
+	server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)     
+	server.setblocking(0)     
+	server.bind((my_hostname, int(my_port)))         
+	server.listen(10)
+	inputs = [server]
+	outputs = []
+	message_queues = {}
 
 	# creating the client socket
-	client = socket.socket()
-	client.connect((my_address, my_port))
-	print(client.recv(1024))
-	client.close()
+	client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+	print("Server started on port:", my_port)
+
+	# Infinite loop for selecting connections
+	while inputs: 
+		# check if sockets are ready to write, read, or some error/exception occurred
+		# blocks until a passed socket is ready
+		readable, writable, exception = select.select(inputs, outputs, inputs)
+
+		# Loop for the ready sockets in the readable list
+		# List for new incoming clients
+		for ready_socket in readable:
+			if ready_socket is server:
+				connection, client_address = ready_socket.accept()
+				connection.setblocking(0)
+				inputs.append(connection)
+				message_queues[connection] = Queue.Queue()
+			else:
+				data = ready_socket.recv(1024)
+				if data:
+					message_queues[ready_socket].put(data)
+					if ready_socket not in outputs:
+						outputs.append(ready_socket)
+				else:
+					if ready_socket in outputs:
+						outputs.remove(ready_socket)
+					inputs.remove(ready_socket)
+					ready_socket.close()
+					del message_queues[ready_socket]
+
+		# Loop for the ready sockets in the writable list
+		# Get pending messages and writes them to the socket
+		for ready_socket in writable:
+			try:
+				message = message_queues[ready_socket].get_nowait()
+			except Queue.Empty:
+				outputs.remove(ready_socket)
+			else:
+				ready_socket.send(message)
+
+		# Loop for the sockets that have errors in the exception list
+		# If there are any errors, the socket is removed from the lists
+		for ready_socket in exception:
+			if ready_socket in outputs:
+				outputs.remove(ready_socket)
+			inputs.remove(ready_socket)
+			ready_socket.close()
+			del message_queues[ready_socket]
+
 
 	''' Use the following code to convert a hostname to an IP and start a channel
 	Note that every stub needs a channel attached to it
