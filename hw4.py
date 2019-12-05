@@ -11,11 +11,20 @@ import grpc
 import csci4220_hw4_pb2
 import csci4220_hw4_pb2_grpc
 import threading 
+import time
 
 #Declaring global variables
+_ONE_DAY_IN_SECONDS = 60 * 60 * 24
 local_id = None
 my_port = None
 my_address = None
+
+class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
+
+	def FindNode(self, request, context):
+		return csci4220_hw4_pb2.NodeList(
+			responding_node=csci4220_hw4_pb2.Node(id=10,port=20,address="some address respone"),
+			nodes=[])
 
 def setCommandLineArgs():
 	if len(sys.argv) != 4:
@@ -31,20 +40,30 @@ def setCommandLineArgs():
 	#change back to my_hostname = socket.gethostname() # Gets my host name
 	my_hostname = "127.0.0.1"
 	my_address = socket.gethostbyname(my_hostname) # Gets my IP address from my hostname
-	print("My address: {}".format(my_address))
 
 def listenForConnections():
-	UDPServerSocket = socket.socket(family = socket.AF_INET, type = socket.SOCK_DGRAM) 
-	UDPServerSocket.bind((my_address, int(my_port))) 
-	# print("Listening for datagrams on {}: {}".format(my_address,my_port))
-	print("THREAD About to block on recv")
-	while(True): 
-		# receiving name from client 
-		name, addr1 = UDPServerSocket.recvfrom(bufferSize) 
-		name = name.decode() 
-		print("THREAD Received from client: {}".format(name))
-		bytesToSend = str.encode("Ack!") 
-		UDPServerSocket.sendto(bytesToSend, addr1) 
+	# UDPServerSocket = socket.socket(family = socket.AF_INET, type = socket.SOCK_DGRAM) 
+	# UDPServerSocket.bind((my_address, int(my_port))) 
+	# # print("Listening for datagrams on {}: {}".format(my_address,my_port))
+	# print("THREAD About to block on recv")
+	# while(True): 
+	# 	# receiving name from client 
+	# 	name, addr1 = UDPServerSocket.recvfrom(bufferSize) 
+	# 	name = name.decode() 
+	# 	print("THREAD Received from client: {}".format(name))
+	# 	bytesToSend = str.encode("Ack!") 
+	# 	UDPServerSocket.sendto(bytesToSend, addr1) 
+	print("gRPC server starting at: {}".format(my_address+':'+my_port))
+	server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
+	csci4220_hw4_pb2_grpc.add_KadImplServicer_to_server(KadImpl(), server)
+	server.add_insecure_port(my_address + ':' + my_port)
+	server.start()
+	try:
+	    while True:
+	        time.sleep(_ONE_DAY_IN_SECONDS)
+	except KeyboardInterrupt:
+	    server.stop(0)
+
 
 
 def blockOnStdin():
@@ -56,13 +75,17 @@ def blockOnStdin():
 			print("Received BOOTSTRAP command")
 			remote_hostname = buffer.split()[1]
 			remote_port = buffer.split()[2]
-			print("remote_hostname: {}, remote_port: {}".format(remote_hostname, remote_port))
 			#send remote node a find_node RPC (defined in the proto file)
 			#need to establish an insecure channel
 			remote_addr = socket.gethostbyname(remote_hostname)
+			print("remote_hostname: {}, remote_addr: {}, remote_port: {}".format(remote_hostname, remote_addr, remote_port))
 			channel = grpc.insecure_channel(remote_addr + ':' + remote_port)
 			stub = csci4220_hw4_pb2_grpc.KadImplStub(channel)
-			# response = stub.FindNode(helloworld_pb2.HelloRequest(name='you'))
+			response = stub.FindNode(csci4220_hw4_pb2.IDKey(
+				node=csci4220_hw4_pb2.Node(id=1,port=2,address="some address")
+				, idkey = local_id))
+			print("Received: " + response.responding_node.address)
+			# print("After BOOTSTRAP(<remoteID>) k_buckets now look like:") 
 
 
 	''' Use the following code to convert a hostname to an IP and start a channel
