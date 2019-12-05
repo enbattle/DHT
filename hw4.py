@@ -6,36 +6,13 @@ import socket  # for gethostbyname()
 
 import select
 import queue as Queue
+import threading
 import grpc
 
 import csci4220_hw4_pb2
 import csci4220_hw4_pb2_grpc
 
-def run():
-	if len(sys.argv) != 4:
-		print("Error, correct usage is {} [my id] [my port] [k]".format(sys.argv[0]))
-		sys.exit(-1)
-
-	local_id = int(sys.argv[1])
-	my_port = str(int(sys.argv[2])) # add_insecure_port() will want a string
-	k = int(sys.argv[3])
-	my_hostname = socket.gethostname() # Gets my host name
-	my_address = socket.gethostbyname(my_hostname) # Gets my IP address from my hostname
-
-	# creating the server socket
-	server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)     
-	server.setblocking(0)     
-	server.bind((my_hostname, int(my_port)))         
-	server.listen(10)
-	inputs = [server]
-	outputs = []
-	message_queues = {}
-
-	# creating the client socket
-	client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-	print("Server started on port:", my_port)
-
+def childThread(inputs, outputs, message_queues):
 	# Infinite loop for selecting connections
 	while inputs: 
 		# check if sockets are ready to write, read, or some error/exception occurred
@@ -52,10 +29,12 @@ def run():
 				message_queues[connection] = Queue.Queue()
 			else:
 				data = ready_socket.recv(1024)
+				# If data, add message to the queue
 				if data:
 					message_queues[ready_socket].put(data)
 					if ready_socket not in outputs:
 						outputs.append(ready_socket)
+				# If no data is read from a ready socket, it is disconnected
 				else:
 					if ready_socket in outputs:
 						outputs.remove(ready_socket)
@@ -81,6 +60,55 @@ def run():
 			inputs.remove(ready_socket)
 			ready_socket.close()
 			del message_queues[ready_socket]
+
+def run():
+	if len(sys.argv) != 4:
+		print("Error, correct usage is {} [my id] [my port] [k]".format(sys.argv[0]))
+		sys.exit(-1)
+
+	local_id = int(sys.argv[1])
+	my_port = str(int(sys.argv[2])) # add_insecure_port() will want a string
+	k = int(sys.argv[3])
+	my_hostname = socket.gethostname() # Gets my host name
+	my_address = socket.gethostbyname(my_hostname) # Gets my IP address from my hostname
+
+	# creating the server socket
+	server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)     
+	server.setblocking(0)     
+	server.bind((my_hostname, int(my_port)))         
+	server.listen(10)
+	inputs = [server]
+	outputs = []
+	message_queues = {}
+
+	# creating the client socket
+	client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+	# create a thread that checks on incoming connections
+	creatingChildThread = threading.Thread(target=childThread, 
+		args=(inputs, outputs, message_queues))
+
+	# Starting the child thread
+	creatingChildThread.start()
+
+	print("Server started on port:", my_port)
+
+	# Parent thread continues to listen in on user input (stdin)
+	while True:
+		command = input("Please enter a command: ")
+
+		if "QUIT" in command:
+			continue
+		elif "BOOTSTRAP" in command:
+			continue
+		elif "FIND_NODE" in command:
+			continue
+		elif "FIND_VALUE" in command:
+			continue
+		elif "STORE" in command:
+			continue
+		else:
+			print("Invalid command! Please try again!")
 
 
 	''' Use the following code to convert a hostname to an IP and start a channel
