@@ -22,15 +22,7 @@ idkey_idkey = None # Uint32 (int)
 k_buckets = []
 mode_kv_keyvalue = None # Boolean
 mode_kv_keyvalue_key = None # Uint32 (int)
-mode_kv_keyvalue_value = None # String
-
-def formatKBucketString():
-	k_bucket_str = ""
-	for i, entry in enumerate(k_buckets):
-		k_bucket_str += str(i) + ": " + str(k_buckets[i].id) + ':' + str(k_buckets[i].port)
-		if(i != len(k_buckets) - 1):
-			k_bucket_str += '\n'
-	return k_bucket_str 
+mode_kv_keyvalue_value = None # String 
 
 class Peer:
   def __init__(self, id, address, port):
@@ -95,6 +87,42 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 				address = my_address),
 			idkey = idkey_idkey)
 
+def formatKBucketString():
+	k_bucket_str = ""
+	for i, entry in enumerate(k_buckets):
+		k_bucket_str += str(i) + ": " + str(k_buckets[i].id) + ':' + str(k_buckets[i].port)
+		if(i != len(k_buckets) - 1):
+			k_bucket_str += '\n'
+	return k_bucket_str
+
+def handleBootstrapMSG(buffer):
+	print("Received BOOTSTRAP command")
+	remote_hostname = buffer.split()[1]
+	remote_port = buffer.split()[2]
+	#send remote node a find_node RPC (defined in the proto file)
+	remote_addr = socket.gethostbyname(remote_hostname)
+	print("remote_hostname: {}, remote_addr: {}, remote_port: {}".format(remote_hostname, remote_addr, remote_port))
+	#need to establish an insecure channel
+	channel = grpc.insecure_channel(remote_addr + ':' + remote_port)
+	stub = csci4220_hw4_pb2_grpc.KadImplStub(channel)
+	response = stub.FindNode(csci4220_hw4_pb2.IDKey(
+		node=csci4220_hw4_pb2.Node(id=local_id,port=int(my_port),address=my_address)
+		, idkey = local_id))
+	#store remote as a new peer
+	new_peer = Peer(response.responding_node.id, response.responding_node.address, response.responding_node.port)
+	k_buckets.append(new_peer)
+	k_bucket_str = formatKBucketString()
+	print("After BOOTSTRAP({}) k_buckets now look like:\n{}".format(response.responding_node.id, k_bucket_str)) 
+
+def handleFindNodeMsg(buffer):
+	print("Received FIND_NODE command")
+	node_id = int(buffer.split()[1])
+	print("node_id " + str(node_id))
+	if(local_id == node_id):
+		print("Found node!")
+	else:
+		print("Did not find node. searching...")
+
 def setCommandLineArgs():
 	if len(sys.argv) != 4:
 		print("Error, correct usage is {} [my id] [my port] [k]".format(sys.argv[0]))
@@ -122,34 +150,15 @@ def listenForConnections():
 	except KeyboardInterrupt:
 	    server.stop(0)
 
-
 def blockOnStdin():
 	while(True):
 		buffer = input('enter something: \n')
 		print("MAIN Received from stdin: {}".format(buffer))
 
 		if "BOOTSTRAP" in buffer:
-			print("Received BOOTSTRAP command")
-			remote_hostname = buffer.split()[1]
-			remote_port = buffer.split()[2]
-			#send remote node a find_node RPC (defined in the proto file)
-			remote_addr = socket.gethostbyname(remote_hostname)
-			print("remote_hostname: {}, remote_addr: {}, remote_port: {}".format(remote_hostname, remote_addr, remote_port))
-			#need to establish an insecure channel
-			channel = grpc.insecure_channel(remote_addr + ':' + remote_port)
-			stub = csci4220_hw4_pb2_grpc.KadImplStub(channel)
-			response = stub.FindNode(csci4220_hw4_pb2.IDKey(
-				node=csci4220_hw4_pb2.Node(id=local_id,port=int(my_port),address=my_address)
-				, idkey = local_id))
-			#store remote as a new peer
-			new_peer = Peer(response.responding_node.id, response.responding_node.address, response.responding_node.port)
-			k_buckets.append(new_peer)
-			k_bucket_str = formatKBucketString()
-			print("After BOOTSTRAP({}) k_buckets now look like:\n{}".format(response.responding_node.id, k_bucket_str)) 
-
+			handleBootstrapMSG(buffer)
 		elif "FIND_NODE" in buffer:
-			continue
-
+			handleFindNodeMsg(buffer)
 		elif "FIND_VALUE" in buffer:
 			continue
 
