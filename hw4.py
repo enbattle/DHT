@@ -25,8 +25,6 @@ k_buckets = []
 mode_kv_keyvalue = None # Boolean
 mode_kv_keyvalue_key = None # Uint32 (int)
 mode_kv_keyvalue_value = None # String 
-node_key = None
-node_value = None
 
 class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 	# Takes an IDKey and returns k nodes with distance closest to ID requested
@@ -92,7 +90,7 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 
 	# Takes an IDKey
 	# Notifies remote node that the node with the ID in IDKey is quitting the network
-	# Remove from the remote node's k_buckets
+	# Remove from the remote node's k-buckets
 	# Needs to return something, but client does not use this return value
 	def Quit(self, request, context):
 		request_id = request.node.id
@@ -144,26 +142,6 @@ def getKClosestNodesToTargetNode(target_node_id):
 
 	return k_closest_nodes
 
-def findClosestNodeForStore(key):
-	closest_distance = sys.maxsize
-	closest_node = None
-	for bucket in k_buckets:
-		for node in bucket:
-			print("I'm on this node: " + str(node.id))
-			distance = node.id ^ key
-			print("This is the node distance: " + str(distance))
-			if(distance < closest_distance):
-				closest_distance = distance
-				closest_node = node
-
-	current_node_distance = local_id ^ key
-	print("Closest distance: {}. current_node_distance: {}".format(closest_distance,current_node_distance))
-	if closest_node is None or current_node_distance < closest_distance:
-		return None
-	else:
-		print("Found other closest_node: {} with distance: {}".format(closest_node.id, closest_distance))
-		return closest_node
-
 #Add the request node to the k_buckets
 #Might have to handle a case of fullness (kick something out)
 def storeNodeInKBuckets(Node):
@@ -204,10 +182,6 @@ def storeNodeInKBuckets(Node):
 			k_buckets[somePower].pop(0) # Pop least recent node
 			k_buckets[somePower].append(Node) # add node to the end
 
-def storeKeyValuePair(key,value):
-	global node_key, node_value
-	node_key = key
-	node_value = value
 
 def formatKBucketString():
 	k_bucket_str = ""
@@ -297,9 +271,7 @@ def handleFindValueMsg(buffer):
 	node_id = int(buffer.split()[1])
 	print("node_id " + str(node_id))
 	if(local_id == node_id):
-		print("Found destination id: " + str(node_id))
-		kb_str = formatKBucketString()
-		print("After FIND_NODE command, k-buckets are:\n{}".format(kb_str))
+		print("Found node!")
 	else:
 		print("Did not find node. searching...")
 		#get the k closest nodes to nodeid
@@ -399,10 +371,11 @@ def blockOnStdin():
 		elif "FIND_VALUE" in buffer:
 			handleFindValueMsg(buffer)
 		elif "STORE" in buffer:
-			handleStoreMsg(buffer)
+			continue
+
 		elif "QUIT" in buffer:
 			handleQuitMsg()
-			exit(0)
+			sys.exit()
 		else:
 			print("Invalid command! Please try again!")
 	''' Use the following code to convert a hostname to an IP and start a channel
