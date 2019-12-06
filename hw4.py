@@ -18,6 +18,14 @@ _ONE_DAY_IN_SECONDS = 60 * 60 * 24
 local_id = None
 my_port = None
 my_address = None
+k_buckets = []
+
+class Peer:
+  def __init__(self, id, address, port, key):
+    self.id = id
+    self.address = address
+    self.port = port
+    self.key = key
 
 class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 
@@ -71,9 +79,10 @@ def blockOnStdin():
 			remote_hostname = buffer.split()[1]
 			remote_port = buffer.split()[2]
 			#send remote node a find_node RPC (defined in the proto file)
-			#need to establish an insecure channel
 			remote_addr = socket.gethostbyname(remote_hostname)
+			# key = local_id ^ 
 			print("remote_hostname: {}, remote_addr: {}, remote_port: {}".format(remote_hostname, remote_addr, remote_port))
+			#need to establish an insecure channel
 			channel = grpc.insecure_channel(remote_addr + ':' + remote_port)
 			stub = csci4220_hw4_pb2_grpc.KadImplStub(channel)
 			response = stub.FindNode(csci4220_hw4_pb2.IDKey(
