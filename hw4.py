@@ -25,16 +25,23 @@ k_buckets = []
 mode_kv_keyvalue = None # Boolean
 mode_kv_keyvalue_key = None # Uint32 (int)
 mode_kv_keyvalue_value = None # String 
+node_key = None
+node_value = None
+
+# class Peer:
+#   def __init__(self, id, address, port):
+#     self.id = id
+#     self.address = address
+#     self.port = port
 
 class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 	# Takes an IDKey and returns k nodes with distance closest to ID requested
 	def FindNode(self, request, context):
-		print("Serving FindNode(<targetID>) request for <requesterID>")
 		request_id = request.node.id
 		request_address = request.node.address
 		request_port = request.node.port
 
-		k_closest_nodes = getKClosestNodesToTargetNode(request.node.id)
+		k_closest_nodes = getKClosestNodesToTargetNode(request.node)
 
 		new_node = csci4220_hw4_pb2.Node(id=request_id, port=request_port, address=request_address)
 		storeNodeInKBuckets(new_node)
@@ -78,8 +85,6 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 		print("Received store request from id:{}, port:{}, address:{}".format(request_id, request_port, request_address))
 		print("Storing key {} value {}".format(request.key, request.value))
 		storeKeyValuePair(request.key, request.value)
-		storeNodeInKBuckets(request.node)
-		print("Kbuckets now look like " + formatKBucketString())
 
 		return csci4220_hw4_pb2.IDKey(
 			node = csci4220_hw4_pb2.Node(
@@ -90,7 +95,7 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 
 	# Takes an IDKey
 	# Notifies remote node that the node with the ID in IDKey is quitting the network
-	# Remove from the remote node's k-buckets
+	# Remove from the remote node's k_buckets
 	# Needs to return something, but client does not use this return value
 	def Quit(self, request, context):
 		request_id = request.node.id
@@ -120,7 +125,8 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 				address = my_address),
 			idkey = idkey_idkey)
 
-def getKClosestNodesToTargetNode(target_node_id):
+def getKClosestNodesToTargetNode(target_node):
+	target_id = target_node.id
 	k_closest_nodes = []
 	k_closest_distances = [] #stores the distance for each of the k closest nodes to the target node
 	k_closest_nodes_len = 0 #length of the k_closest_nodes array
@@ -128,10 +134,10 @@ def getKClosestNodesToTargetNode(target_node_id):
 		for node in bucket:
 			if(k_closest_nodes_len < k):
 				k_closest_nodes.append(node)
-				k_closest_distances.append(k_closest_nodes[k_closest_nodes_len].id ^ target_node_id)
+				k_closest_distances.append(k_closest_nodes[k_closest_nodes_len].id ^ target_id)
 				k_closest_nodes_len += 1
 			else:
-				current_node_distance = node.id ^ target_node_id
+				current_node_distance = node.id ^ target_id
 				#find the greatest distance of the k_closest_nodes
 				largest_distance = max(k_closest_distances)
 				largest_distance_index = k_closest_distances.index(largest_distance)
@@ -141,6 +147,26 @@ def getKClosestNodesToTargetNode(target_node_id):
 					k_closest_distances[largest_distance_index] = current_node_distance
 
 	return k_closest_nodes
+
+def findClosestNodeForStore(key):
+	closest_distance = sys.maxsize
+	closest_node = None
+	for bucket in k_buckets:
+		for node in bucket:
+			print("I'm on this node: " + str(node.id))
+			distance = node.id ^ key
+			print("This is the node distance: " + str(distance))
+			if(distance < closest_distance):
+				closest_distance = distance
+				closest_node = node
+
+	current_node_distance = local_id ^ key
+	print("Closest distance: {}. current_node_distance: {}".format(closest_distance,current_node_distance))
+	if closest_node is None or current_node_distance < closest_distance:
+		return None
+	else:
+		print("Found other closest_node: {} with distance: {}".format(closest_node.id, closest_distance))
+		return closest_node
 
 #Add the request node to the k_buckets
 #Might have to handle a case of fullness (kick something out)
@@ -183,6 +209,11 @@ def storeNodeInKBuckets(Node):
 			k_buckets[somePower].append(Node) # add node to the end
 
 
+def storeKeyValuePair(key,value):
+	global node_key, node_value
+	node_key = key
+	node_value = value
+
 def formatKBucketString():
 	k_bucket_str = ""
 	for i, bucket in enumerate(k_buckets):
@@ -194,13 +225,6 @@ def formatKBucketString():
 		if(i != len(k_buckets) - 1):
 			k_bucket_str += '\n'
 	return k_bucket_str
-
-def isInkBuckets(node_id):
-	for bucket in k_buckets:
-		for node in bucket:
-			if node.id == node_id:
-				return True
-	return False
 
 def handleBootstrapMSG(buffer):
 	print("Received BOOTSTRAP command")
@@ -260,26 +284,6 @@ def handleFindNodeMsg(buffer):
 			if node_was_found:
 				break
 
-	print("After FIND_NODE command, k-buckets are:\n" + formatKBucketString())
-	if node_was_found:
-		print("Found destination id " + node_id)
-	else:
-		print("Could not find destination id " + node_id)
-
-def handleFindValueMsg(buffer):
-	print("Received FIND_VALUE command")
-	node_id = int(buffer.split()[1])
-	print("node_id " + str(node_id))
-	if(local_id == node_id):
-		print("Found node!")
-	else:
-		print("Did not find node. searching...")
-		#get the k closest nodes to nodeid
-		k_closest_nodes = getKClosestNodesToTargetNode(node_id)
-		# while len(k_closest_nodes) > 0:
-		# 	for node in k_closest_nodes:
-
-
 def handleStoreMsg(buffer):
 	print("Received STORE command")
 	key = int(buffer.split()[1])
@@ -303,9 +307,23 @@ def handleStoreMsg(buffer):
 			key=key,
 			value=value
 			))
+		#Might need to add node to most recent
 		print("Just received: id:{} address:{} port:{} key:{}".format(
 			str(response.node.id), response.node.address, str(response.node.port),
 			str(response.idkey)))
+
+def handleFindValueMsg(buffer):
+	print("Received FIND_VALUE command")
+	node_id = int(buffer.split()[1])
+	print("node_id " + str(node_id))
+	if(local_id == node_id):
+		print("Found node!")
+	else:
+		print("Did not find node. searching...")
+		#get the k closest nodes to nodeid
+		k_closest_nodes = getKClosestNodesToTargetNode(node_id)
+		# while len(k_closest_nodes) > 0:
+		# 	for node in k_closest_nodes:
 
 def handleQuitMsg():
 	print("Received QUIT command")
@@ -371,8 +389,7 @@ def blockOnStdin():
 		elif "FIND_VALUE" in buffer:
 			handleFindValueMsg(buffer)
 		elif "STORE" in buffer:
-			continue
-
+			handleStoreMsg(buffer)
 		elif "QUIT" in buffer:
 			handleQuitMsg()
 			sys.exit()
