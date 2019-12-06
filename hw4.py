@@ -25,6 +25,8 @@ k_buckets = []
 mode_kv_keyvalue = None # Boolean
 mode_kv_keyvalue_key = None # Uint32 (int)
 mode_kv_keyvalue_value = None # String 
+node_key = None
+node_value = None
 
 # class Peer:
 #   def __init__(self, id, address, port):
@@ -77,6 +79,12 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 	# Stores the value at the given node
 	# Needs to return something, but client does not use this return value
 	def Store(self, request, context):
+		request_id = request.node.id
+		request_port = request.node.port
+		request_address = request.node.address
+		print("Received store request from id:{}, port:{}, address:{}".format(request_id, request_port, request_address))
+		print("Storing key {} value {}".format(request.key, request.value))
+		storeKeyValuePair(request.key, request.value)
 		return csci4220_hw4_pb2.IDKey(
 			node = csci4220_hw4_pb2.Node(
 				id = local_id,
@@ -119,6 +127,26 @@ def getKClosestNodesToTargetNode(target_node):
 
 	return k_closest_nodes
 
+def findClosestNodeForStore(key):
+	closest_distance = sys.maxsize
+	closest_node = None
+	for bucket in k_buckets:
+		for node in bucket:
+			print("I'm on this node: " + str(node.id))
+			distance = node.id ^ key
+			print("This is the node distance: " + str(distance))
+			if(distance < closest_distance):
+				closest_distance = distance
+				closest_node = node
+
+	current_node_distance = local_id ^ key
+	print("Closest distance: {}. current_node_distance: {}".format(closest_distance,current_node_distance))
+	if closest_node is None or current_node_distance < closest_distance:
+		return None
+	else:
+		print("Found other closest_node: {} with distance: {}".format(closest_node.id, closest_distance))
+		return closest_node
+
 #Add the request node to the k_buckets
 #Might have to handle a case of fullness (kick something out)
 def storeNodeInKBuckets(Node):
@@ -127,6 +155,11 @@ def storeNodeInKBuckets(Node):
 			#Might have to add in a specific order
 			bucket.append(Node)
 			break
+
+def storeKeyValuePair(key,value):
+	global node_key, node_value
+	node_key = key
+	node_value = value
 
 def formatKBucketString():
 	k_bucket_str = ""
@@ -172,6 +205,33 @@ def handleFindNodeMsg(buffer):
 	else:
 		print("Did not find node. searching...")
 
+def handleStoreMsg(buffer):
+	print("Received STORE command")
+	key = int(buffer.split()[1])
+	value = buffer.split()[2]
+	print("key: {}, value: {}".format(key,value))
+	closest_node = findClosestNodeForStore(key)
+	#Already at the closest node
+	if closest_node is None:
+		print("Storing key {} value {}".format(key,value))
+		storeKeyValuePair(key,value)
+	else:
+		print("Storing key {} at node {}".format(key,closest_node.id))
+		channel = grpc.insecure_channel(closest_node.address + ':' + str(closest_node.port))
+		stub = csci4220_hw4_pb2_grpc.KadImplStub(channel)
+		response = stub.Store(csci4220_hw4_pb2.KeyValue(
+			node=csci4220_hw4_pb2.Node(
+				id=local_id,
+				port=int(my_port),
+				address=my_address
+			),
+			key=key,
+			value=value
+			))
+		print("Just received: id:{} address:{} port:{} key:{}".format(
+			str(response.node.id), response.node.address, str(response.node.port),
+			str(response.idkey)))
+
 def setCommandLineArgs():
 	if len(sys.argv) != 4:
 		print("Error, correct usage is {} [my id] [my port] [k]".format(sys.argv[0]))
@@ -216,8 +276,7 @@ def blockOnStdin():
 			continue
 
 		elif "STORE" in buffer:
-			continue
-
+			handleStoreMsg(buffer)
 		elif "QUIT" in buffer:
 			continue
 
