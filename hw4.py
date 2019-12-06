@@ -42,17 +42,6 @@ def setCommandLineArgs():
 	my_address = socket.gethostbyname(my_hostname) # Gets my IP address from my hostname
 
 def listenForConnections():
-	# UDPServerSocket = socket.socket(family = socket.AF_INET, type = socket.SOCK_DGRAM) 
-	# UDPServerSocket.bind((my_address, int(my_port))) 
-	# # print("Listening for datagrams on {}: {}".format(my_address,my_port))
-	# print("THREAD About to block on recv")
-	# while(True): 
-	# 	# receiving name from client 
-	# 	name, addr1 = UDPServerSocket.recvfrom(bufferSize) 
-	# 	name = name.decode() 
-	# 	print("THREAD Received from client: {}".format(name))
-	# 	bytesToSend = str.encode("Ack!") 
-	# 	UDPServerSocket.sendto(bytesToSend, addr1) 
 	print("gRPC server starting at: {}".format(my_address+':'+my_port))
 	server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
 	csci4220_hw4_pb2_grpc.add_KadImplServicer_to_server(KadImpl(), server)
