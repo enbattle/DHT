@@ -41,6 +41,11 @@ class Peer:
 class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 	# Takes an IDKey and returns k nodes with distance closest to ID requested
 	def FindNode(self, request, context):
+		print("Storing Peer, id:{}, address:{}, port:{}".format(str(request.node.id), str(request.node.address),
+			str(request.node.port)))
+		k_buckets.append(Peer(request.node.id, request.node.address, request.node.port))
+		k_bucket_str = formatKBucketString()
+		print("k_bucket_str:\n" + k_bucket_str)
 		return csci4220_hw4_pb2.NodeList(
 			responding_node = csci4220_hw4_pb2.Node(
 				id = local_id,
