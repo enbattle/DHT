@@ -24,12 +24,19 @@ mode_kv_keyvalue = None # Boolean
 mode_kv_keyvalue_key = None # Uint32 (int)
 mode_kv_keyvalue_value = None # String
 
+def formatKBucketString():
+	k_bucket_str = ""
+	for i, entry in enumerate(k_buckets):
+		k_bucket_str += str(i) + ": " + str(k_buckets[i].id) + ':' + str(k_buckets[i].port)
+		if(i != len(k_buckets) - 1):
+			k_bucket_str += '\n'
+	return k_bucket_str 
+
 class Peer:
-  def __init__(self, id, address, port, key):
+  def __init__(self, id, address, port):
     self.id = id
     self.address = address
     self.port = port
-    self.key = key
 
 class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 	# Takes an IDKey and returns k nodes with distance closest to ID requested
@@ -111,7 +118,6 @@ def listenForConnections():
 	    server.stop(0)
 
 
-
 def blockOnStdin():
 	while(True):
 		buffer = input('enter something: \n')
@@ -123,7 +129,6 @@ def blockOnStdin():
 			remote_port = buffer.split()[2]
 			#send remote node a find_node RPC (defined in the proto file)
 			remote_addr = socket.gethostbyname(remote_hostname)
-			# key = local_id ^ 
 			print("remote_hostname: {}, remote_addr: {}, remote_port: {}".format(remote_hostname, remote_addr, remote_port))
 			#need to establish an insecure channel
 			channel = grpc.insecure_channel(remote_addr + ':' + remote_port)
@@ -131,9 +136,11 @@ def blockOnStdin():
 			response = stub.FindNode(csci4220_hw4_pb2.IDKey(
 				node=csci4220_hw4_pb2.Node(id=local_id,port=int(my_port),address=my_address)
 				, idkey = local_id))
-			print("After BOOTSTRAP({}) k_buckets now look like:".format(response.responding_node.id)) 
-			#store remote as peer
-			# new_peer = Peer()
+			#store remote as a new peer
+			new_peer = Peer(response.responding_node.id, response.responding_node.address, response.responding_node.port)
+			k_buckets.append(new_peer)
+			k_bucket_str = formatKBucketString()
+			print("After BOOTSTRAP({}) k_buckets now look like:\n{}".format(response.responding_node.id, k_bucket_str)) 
 
 		elif "FIND_NODE" in buffer:
 			continue
