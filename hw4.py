@@ -28,20 +28,15 @@ mode_kv_keyvalue_value = None # String
 node_key = None
 node_value = None
 
-# class Peer:
-#   def __init__(self, id, address, port):
-#     self.id = id
-#     self.address = address
-#     self.port = port
-
 class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 	# Takes an IDKey and returns k nodes with distance closest to ID requested
 	def FindNode(self, request, context):
+		print("Serving FindNode(<targetID>) request for <requesterID>")
 		request_id = request.node.id
 		request_address = request.node.address
 		request_port = request.node.port
 
-		k_closest_nodes = getKClosestNodesToTargetNode(request.node)
+		k_closest_nodes = getKClosestNodesToTargetNode(request.node.id)
 
 		new_node = csci4220_hw4_pb2.Node(id=request_id, port=request_port, address=request_address)
 		storeNodeInKBuckets(new_node)
@@ -85,11 +80,8 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 		print("Received store request from id:{}, port:{}, address:{}".format(request_id, request_port, request_address))
 		print("Storing key {} value {}".format(request.key, request.value))
 		storeKeyValuePair(request.key, request.value)
-
-		#Check if request node is in k_buckets
-		#if so, move it to the most recent place and slide all the other ones down
-		#otherwise add it to most recent place 
-		
+		storeNodeInKBuckets(request.node)
+		print("Kbuckets now look like " + formatKBucketString())
 
 		return csci4220_hw4_pb2.IDKey(
 			node = csci4220_hw4_pb2.Node(
@@ -130,8 +122,7 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 				address = my_address),
 			idkey = idkey_idkey)
 
-def getKClosestNodesToTargetNode(target_node):
-	target_id = target_node.id
+def getKClosestNodesToTargetNode(target_node_id):
 	k_closest_nodes = []
 	k_closest_distances = [] #stores the distance for each of the k closest nodes to the target node
 	k_closest_nodes_len = 0 #length of the k_closest_nodes array
@@ -139,10 +130,10 @@ def getKClosestNodesToTargetNode(target_node):
 		for node in bucket:
 			if(k_closest_nodes_len < k):
 				k_closest_nodes.append(node)
-				k_closest_distances.append(k_closest_nodes[k_closest_nodes_len].id ^ target_id)
+				k_closest_distances.append(k_closest_nodes[k_closest_nodes_len].id ^ target_node_id)
 				k_closest_nodes_len += 1
 			else:
-				current_node_distance = node.id ^ target_id
+				current_node_distance = node.id ^ target_node_id
 				#find the greatest distance of the k_closest_nodes
 				largest_distance = max(k_closest_distances)
 				largest_distance_index = k_closest_distances.index(largest_distance)
@@ -198,7 +189,7 @@ def storeNodeInKBuckets(Node):
 	found = False
 	foundIndex = 0
 	for bucket_node in k_buckets[somePower]:
-		if bucket_node.id == Node.id:
+		if bucket_node.id == Node.id and bucket_node.port == Node.port and bucket_node.address == Node.address:
 			found = True
 			break
 
@@ -230,6 +221,13 @@ def formatKBucketString():
 			k_bucket_str += '\n'
 	return k_bucket_str
 
+def isInkBuckets(node_id):
+	for bucket in k_buckets:
+		for node in bucket:
+			if node.id == node_id:
+				return True
+	return False
+
 def handleBootstrapMSG(buffer):
 	print("Received BOOTSTRAP command")
 	remote_hostname = buffer.split()[1]
@@ -255,6 +253,7 @@ def handleBootstrapMSG(buffer):
 
 def handleFindNodeMsg(buffer):
 	print("Received FIND_NODE command")
+	print("Before FIND_NODE command, k-buckets are:\n" + formatKBucketString())
 	node_id = int(buffer.split()[1])
 	print("node_id " + str(node_id))
 	if(local_id == node_id):
@@ -263,6 +262,51 @@ def handleFindNodeMsg(buffer):
 		print("After FIND_NODE command, k-buckets are:\n{}".format(kb_str))
 	else:
 		print("Did not find node. searching...")
+		#get the k closest nodes to nodeid
+		k_closest_nodes = getKClosestNodesToTargetNode(node_id)
+		node_was_found = False
+		for node in k_closest_nodes:
+			if node.id == node_id:
+				node_was_found = True
+				break
+			#Might need to check if this is the node we're looking for
+			channel = grpc.insecure_channel(node.address + ':' + node.port)
+			stub = csci4220_hw4_pb2_grpc.KadImplStub(channel)
+			response = stub.FindNode(csci4220_hw4_pb2.IDKey(
+				node=csci4220_hw4_pb2.Node(id=local_id,port=int(my_port),address=my_address),
+				 idkey = local_id))
+			R = response.nodes
+			storeNodeInKBuckets(node) #mark node as most recent
+			#Update k_buckets with all nodes in R
+			for response_node in R:
+				if response_node.id == node_id:
+					node_was_found = True
+				if not isInkBuckets(responding_node.id):
+					storeNodeInKBuckets(responding_node)
+			if node_was_found:
+				break
+
+	print("After FIND_NODE command, k-buckets are:\n" + formatKBucketString())
+	if node_was_found:
+		print("Found destination id " + node_id)
+	else:
+		print("Could not find destination id " + node_id)
+
+def handleFindValueMsg(buffer):
+	print("Received FIND_VALUE command")
+	node_id = int(buffer.split()[1])
+	print("node_id " + str(node_id))
+	if(local_id == node_id):
+		print("Found destination id: " + str(node_id))
+		kb_str = formatKBucketString()
+		print("After FIND_NODE command, k-buckets are:\n{}".format(kb_str))
+	else:
+		print("Did not find node. searching...")
+		#get the k closest nodes to nodeid
+		k_closest_nodes = getKClosestNodesToTargetNode(node_id)
+		# while len(k_closest_nodes) > 0:
+		# 	for node in k_closest_nodes:
+
 
 def handleStoreMsg(buffer):
 	print("Received STORE command")
@@ -290,7 +334,7 @@ def handleStoreMsg(buffer):
 		print("Just received: id:{} address:{} port:{} key:{}".format(
 			str(response.node.id), response.node.address, str(response.node.port),
 			str(response.idkey)))
-		
+
 def handleQuitMsg():
 	print("Received QUIT command")
 	for bucket in k_buckets:
@@ -353,13 +397,12 @@ def blockOnStdin():
 		elif "FIND_NODE" in buffer:
 			handleFindNodeMsg(buffer)
 		elif "FIND_VALUE" in buffer:
-			continue
-
+			handleFindValueMsg(buffer)
 		elif "STORE" in buffer:
 			handleStoreMsg(buffer)
 		elif "QUIT" in buffer:
 			handleQuitMsg()
-
+			exit(0)
 		else:
 			print("Invalid command! Please try again!")
 	''' Use the following code to convert a hostname to an IP and start a channel
