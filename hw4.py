@@ -23,7 +23,7 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 
 	def FindNode(self, request, context):
 		return csci4220_hw4_pb2.NodeList(
-			responding_node=csci4220_hw4_pb2.Node(id=10,port=20,address="some address respone"),
+			responding_node=csci4220_hw4_pb2.Node(id=local_id,port=int(my_port),address=my_address),
 			nodes=[])
 
 def setCommandLineArgs():
@@ -82,10 +82,9 @@ def blockOnStdin():
 			channel = grpc.insecure_channel(remote_addr + ':' + remote_port)
 			stub = csci4220_hw4_pb2_grpc.KadImplStub(channel)
 			response = stub.FindNode(csci4220_hw4_pb2.IDKey(
-				node=csci4220_hw4_pb2.Node(id=1,port=2,address="some address")
+				node=csci4220_hw4_pb2.Node(id=local_id,port=int(my_port),address=my_address)
 				, idkey = local_id))
-			print("Received: " + response.responding_node.address)
-			# print("After BOOTSTRAP(<remoteID>) k_buckets now look like:") 
+			print("After BOOTSTRAP({}) k_buckets now look like:".format(response.responding_node.id)) 
 
 
 	''' Use the following code to convert a hostname to an IP and start a channel
