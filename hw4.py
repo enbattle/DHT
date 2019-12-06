@@ -26,6 +26,12 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 			responding_node=csci4220_hw4_pb2.Node(id=local_id,port=int(my_port),address=my_address),
 			nodes=[])
 
+	# def FindValue(self, request, context):
+
+	# def Store(self, request, context);
+
+	# def Quit(self, request, context):
+
 def setCommandLineArgs():
 	if len(sys.argv) != 4:
 		print("Error, correct usage is {} [my id] [my port] [k]".format(sys.argv[0]))
@@ -75,7 +81,20 @@ def blockOnStdin():
 				, idkey = local_id))
 			print("After BOOTSTRAP({}) k_buckets now look like:".format(response.responding_node.id)) 
 
+		elif "FIND_NODE" in buffer:
+			continue
 
+		elif "FIND_VALUE" in buffer:
+			continue
+
+		elif "STORE" in buffer:
+			continue
+
+		elif "QUIT" in buffer:
+			continue
+
+		else:
+			print("Invalid command! Please try again!")
 	''' Use the following code to convert a hostname to an IP and start a channel
 	Note that every stub needs a channel attached to it
 	When you are done with a channel you should call .close() on the channel.
