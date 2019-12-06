@@ -103,6 +103,26 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 	# Remove from the remote node's k_buckets
 	# Needs to return something, but client does not use this return value
 	def Quit(self, request, context):
+		request_id = request.node.id
+		request_port = request.node.port
+		request_address = request.node.address
+
+		# Try to find quitting node in k_bucket
+		found = False
+		bucketIndex = 0
+		for i,bucket in enumerate(k_buckets):
+			for j,node in enumerate(bucket):
+				if node.id == request_id and node.port == request_port and node.address == request_address:
+					found = True
+					bucketIndex = i
+					break
+
+		# Evict qutting node from k_bucket should it be in there
+		if found == True:
+			print("Evicting quitting node {} from bucket {}".format(request_id, bucketIndex))
+		else:
+			print("No record of quitting node {} in k-buckets.".format(request_id))
+
 		return csci4220_hw4_pb2.IDKey(
 			node = csci4220_hw4_pb2.Node(
 				id = local_id,
@@ -156,11 +176,42 @@ def findClosestNodeForStore(key):
 #Add the request node to the k_buckets
 #Might have to handle a case of fullness (kick something out)
 def storeNodeInKBuckets(Node):
-	for bucket in k_buckets:
-		if(len(bucket) < k):
-			#Might have to add in a specific order
-			bucket.append(Node)
+	# find the bucket to place the node
+	start = 2
+	somePower = 0
+	result = start**somePower
+
+	xor = local_id ^ Node.id
+
+	# Check if local_id == Node.id
+	# Else, perform algorithm
+	if xor != 0:
+		while result < xor:
+			somePower+=1
+			result = start**somePower
+
+		if result > xor:
+			somePower-=1
+
+	# If node is already in list, make sure it is the most recent
+	# else, just add it
+	found = False
+	foundIndex = 0
+	for bucket_node in k_buckets[somePower]:
+		if bucket_node.id == Node.id:
+			found = True
 			break
+
+	# Check if the node was found in the list
+	if found == True:
+		k_buckets[somePower].pop(foundIndex) # pop the node
+		k_buckets[somePower].append(Node) # re-append the node
+	else:
+		if(len(k_buckets[somePower]) < k):
+			k_buckets[somePower].append(Node) # add node to the end
+		else:
+			k_buckets[somePower].pop(0) # Pop least recent node
+			k_buckets[somePower].append(Node) # add node to the end
 
 def storeKeyValuePair(key,value):
 	global node_key, node_value
@@ -239,6 +290,27 @@ def handleStoreMsg(buffer):
 		print("Just received: id:{} address:{} port:{} key:{}".format(
 			str(response.node.id), response.node.address, str(response.node.port),
 			str(response.idkey)))
+		
+def handleQuitMsg():
+	print("Received QUIT command")
+	for bucket in k_buckets:
+		for node in bucket:
+			remote_id = node.id
+			remote_port = node.port
+			remote_addr = node.address
+
+			print("Letting {} know I'm quitting.".format(remote_id))
+
+			channel = grpc.insecure_channel(str(remote_addr) + ':' + str(remote_port))
+			stub = csci4220_hw4_pb2_grpc.KadImplStub(channel)
+			response = stub.Quit(csci4220_hw4_pb2.IDKey(
+				node = csci4220_hw4_pb2.Node(
+					id = local_id, 
+					port = int(my_port),
+					address = my_address),
+				idkey = local_id))
+
+	print("Shut down node {}".format(local_id))
 
 def setCommandLineArgs():
 	if len(sys.argv) != 4:
@@ -286,7 +358,7 @@ def blockOnStdin():
 		elif "STORE" in buffer:
 			handleStoreMsg(buffer)
 		elif "QUIT" in buffer:
-			continue
+			handleQuitMsg()
 
 		else:
 			print("Invalid command! Please try again!")
