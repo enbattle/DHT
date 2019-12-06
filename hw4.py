@@ -15,22 +15,68 @@ import time
 
 #Declaring global variables
 _ONE_DAY_IN_SECONDS = 60 * 60 * 24
-local_id = None
-my_port = None
-my_address = None
+local_id = None # Uint32 (int)
+my_port = None # Uint32 (int)
+my_address = None # String
+
+idkey_idkey = None # Uint32 (int)
+
+mode_kv_keyvalue = None # Boolean
+mode_kv_keyvalue_key = None # Uint32 (int)
+mode_kv_keyvalue_value = None # String
 
 class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 
+	# Takes an IDKey and returns k nodes with distance closest to ID requested
 	def FindNode(self, request, context):
 		return csci4220_hw4_pb2.NodeList(
-			responding_node=csci4220_hw4_pb2.Node(id=local_id,port=int(my_port),address=my_address),
-			nodes=[])
+			responding_node = csci4220_hw4_pb2.Node(
+				id = local_id,
+				port = int(my_port),
+				address = my_address),
+			nodes = [])
 
-	# def FindValue(self, request, context):
+	# Takes an IDKey
+	# If mode_kv is true, then read value returned by kv
+	# Else, read from list of k nodes
+	def FindValue(self, request, context):
+		return csci4220_hw4_pb2.KV_Node_Wrapper(
+			responding_node = csci4220_hw4_pb2.Node(
+				id = local_id,
+				port = int(my_port),
+				address = my_address),
+			mode_kv = mode_kv_keyvalue,
+			kv = csci4220_hw4_pb2.KeyValue(
+				node = csci4220_hw4_pb2.Node(
+					id = local_id,
+					port = int(my_port),
+					address = my_address),
+				key = mode_kv_keyvalue_key,
+				value = mode_kv_keyvalue_value),
+			nodes = [])
 
-	# def Store(self, request, context);
+	# Takes a KeyValue
+	# Stores the value at the given node
+	# Needs to return something, but client does not use this return value
+	def Store(self, request, context):
+		return csci4220_hw4_pb2.IDKey(
+			node = csci4220_hw4_pb2.Node(
+				id = local_id,
+				port = int(my_port),
+				address = my_address),
+			idkey = idkey_idkey)
 
-	# def Quit(self, request, context):
+	# Takes an IDKey
+	# Notifies remote node that the node with the ID in IDKey is quitting the network
+	# Remove from the remote node's k-buckets
+	# Needs to return something, but client does not use this return value
+	def Quit(self, request, context):
+		return csci4220_hw4_pb2.IDKey(
+			node = csci4220_hw4_pb2.Node(
+				id = local_id,
+				port = int(my_port),
+				address = my_address),
+			idkey = idkey_idkey)
 
 def setCommandLineArgs():
 	if len(sys.argv) != 4:
