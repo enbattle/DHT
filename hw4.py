@@ -35,32 +35,16 @@ mode_kv_keyvalue_value = None # String
 class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 	# Takes an IDKey and returns k nodes with distance closest to ID requested
 	def FindNode(self, request, context):
-		# print("Storing Peer, id:{}, address:{}, port:{}".format(str(request.node.id), str(request.node.address),
-		# 	str(request.node.port)))
-		# k_buckets.append(Peer(request.node.id, request.node.address, request.node.port))
-		# k_bucket_str = formatKBucketString()
-		# print("k_bucket_str:\n" + k_bucket_str)
 		request_id = request.node.id
 		request_address = request.node.address
 		request_port = request.node.port
-
-		#Add the request node to the k_buckets
-		#Might have to handle a case of fullness (kick something out)
-		for bucket in k_buckets:
-			if(len(bucket) < k):
-				#Might have to add in a specific order
-				bucket.append(csci4220_hw4_pb2.Node(id=request_id, port=request_port, address=request_address))
-				break
-
-		k_bucket_str = formatKBucketString()
-		print("k_bucket_str:\n" + k_bucket_str)
 
 		#Find the k closest nodes to the request node
 		k_closest_nodes = []
 		k_closest_distances = [] #stores the distance for each of the k closest nodes to the request node
 		k_closest_nodes_len = 0 #length of the k_closest_nodes array
-		for entry in k_buckets:
-			for node in entry:
+		for bucket in k_buckets:
+			for node in bucket:
 				if(k_closest_nodes_len < k):
 					k_closest_nodes.append(node)
 					k_closest_distances.append(k_closest_nodes[k_closest_nodes_len].id ^ request_id)
@@ -74,6 +58,12 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 					if(current_node_distance < largest_distance):
 						k_closest_nodes[largest_distance_index] = node
 						k_closest_distances[largest_distance_index] = current_node_distance
+
+		new_node = csci4220_hw4_pb2.Node(id=request_id, port=request_port, address=request_address)
+		storeNodeInKBuckets(new_node)
+
+		k_bucket_str = formatKBucketString()
+		print("k_bucket_str:\n" + k_bucket_str)
 
 		return csci4220_hw4_pb2.NodeList(
 			responding_node = csci4220_hw4_pb2.Node(
@@ -124,6 +114,15 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 				address = my_address),
 			idkey = idkey_idkey)
 
+#Add the request node to the k_buckets
+#Might have to handle a case of fullness (kick something out)
+def storeNodeInKBuckets(Node):
+	for bucket in k_buckets:
+		if(len(bucket) < k):
+			#Might have to add in a specific order
+			bucket.append(Node)
+			break
+
 def formatKBucketString():
 	k_bucket_str = ""
 	for i, bucket in enumerate(k_buckets):
@@ -149,14 +148,15 @@ def handleBootstrapMSG(buffer):
 	response = stub.FindNode(csci4220_hw4_pb2.IDKey(
 		node=csci4220_hw4_pb2.Node(id=local_id,port=int(my_port),address=my_address)
 		, idkey = local_id))
-	print("Just received: id:{} address:{} port:{} nodes:{}", 
+	print("Just received: id:{} address:{} port:{} nodes:{}".format(
 		str(response.responding_node.id), response.responding_node.address, str(response.responding_node.port),
-		response.nodes)
-	#store remote as a new peer
-	# new_peer = Peer(response.responding_node.id, response.responding_node.address, response.responding_node.port)
-	# k_buckets.append(new_peer)
-	# k_bucket_str = formatKBucketString()
-	# print("After BOOTSTRAP({}) k_buckets now look like:\n{}".format(response.responding_node.id, k_bucket_str)) 
+		response.nodes))
+	#store remote and each of the k closest nodes in k_buckets
+	storeNodeInKBuckets(response.responding_node)
+	for node in response.nodes:
+		storeNodeInKBuckets(node)
+	k_bucket_str = formatKBucketString()
+	print("After BOOTSTRAP({}) k_buckets now look like:\n{}".format(response.responding_node.id, k_bucket_str)) 
 
 def handleFindNodeMsg(buffer):
 	print("Received FIND_NODE command")
