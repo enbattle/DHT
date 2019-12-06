@@ -122,11 +122,40 @@ def getKClosestNodesToTargetNode(target_node):
 #Add the request node to the k_buckets
 #Might have to handle a case of fullness (kick something out)
 def storeNodeInKBuckets(Node):
-	for bucket in k_buckets:
-		if(len(bucket) < k):
-			#Might have to add in a specific order
-			bucket.append(Node)
-			break
+	# find the bucket to place the node
+	start = 2
+	somePower = 0
+	result = start**somePower
+
+	xor = local_id ^ Node.id
+
+	# Check if local_id == Node.id
+	# Else, perform algorithm
+	if xor != 0:
+		while result < xor
+			somePower+=1
+			result = start**somePower
+
+		if result > xor:
+			somePower-=1
+
+	# If node is already in list, make sure it is the most recent
+	# else, just add it
+	found = False
+	foundIndex = 0
+	for bucket_node in k_buckets[somePower]:
+			if bucket_node.id == Node.id:
+				found = True
+		if found == True:
+			k_buckets[somePower].pop(foundIndex) # pop the node
+			k_buckets[somePower].append(Node) # re-append the node
+		else:
+			if(len(k_buckets[somePower]) < k):
+				k_buckets[somePower].append(Node) # add node to the end
+			else:
+				k_buckets[somePower].pop(0) # Pop least recent node
+				k_buckets[somePower].append(Node) # add node to the end
+
 
 def formatKBucketString():
 	k_bucket_str = ""
