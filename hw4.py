@@ -85,6 +85,12 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 		print("Received store request from id:{}, port:{}, address:{}".format(request_id, request_port, request_address))
 		print("Storing key {} value {}".format(request.key, request.value))
 		storeKeyValuePair(request.key, request.value)
+
+		#Check if request node is in k_buckets
+		#if so, move it to the most recent place and slide all the other ones down
+		#otherwise add it to most recent place 
+		
+
 		return csci4220_hw4_pb2.IDKey(
 			node = csci4220_hw4_pb2.Node(
 				id = local_id,
@@ -94,7 +100,7 @@ class KadImpl(csci4220_hw4_pb2_grpc.KadImplServicer):
 
 	# Takes an IDKey
 	# Notifies remote node that the node with the ID in IDKey is quitting the network
-	# Remove from the remote node's k-buckets
+	# Remove from the remote node's k_buckets
 	# Needs to return something, but client does not use this return value
 	def Quit(self, request, context):
 		return csci4220_hw4_pb2.IDKey(
@@ -201,7 +207,9 @@ def handleFindNodeMsg(buffer):
 	node_id = int(buffer.split()[1])
 	print("node_id " + str(node_id))
 	if(local_id == node_id):
-		print("Found node!")
+		print("Found destination id: " + str(node_id))
+		kb_str = formatKBucketString()
+		print("After FIND_NODE command, k-buckets are:\n{}".format(kb_str))
 	else:
 		print("Did not find node. searching...")
 
